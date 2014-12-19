@@ -1,0 +1,31 @@
+COP4610 – Principles of Operating Systems – Summer C 2014
+Prof. Jose F. Osorio
+Group: Apsalar
+Group Members: Maylem Gonzalez – 2134900
+               Renan Santana – 4031451
+File: README
+
+
+Instructions for compiling test programs:
+
+Navigate to /root/Desktop/Assignment4/ and type make into the terminal to make both of the test programs for part 1 and part 2 of this assignment.
+
+In this folder, the makefiles for the test programs for part 1 and part 2 can be found in the folder Test Programs.
+
+
+Instructions for running the test programs:
+
+To run the test programs, navigate to /root/Desktop/Assignment4/ and, after making the executables, enter "./test_part_1" to test the first part of the assignment. No other parameters need to be supplied. Similarly, to run part 2 of the assignment, type in "./test_part_2" .
+
+For information on what the test programs output as well as our observations, please view the report.txt file. 
+
+
+Contents of this submission folder:
+
+Modified Kernel Files: Contains all the files modified in the completion of parts 1 and 2. vmscan.c contains the necessary modifications for data values #5 and #6 for part 1, as well as our implementation of the clock based algorithm in part 2.
+
+Part 2 Data: Memory allocation and initialization times collected for part 2. Contains a graph showing the performance of the Second Chance algorithm vs the Clock Based algorithm.
+
+System Call: Contains the system call file along with the makefile for it and any needed header files.
+
+Test Programs: Contains the programs to test parts 1 and 2 of this assignment, as well as the makefile used to compile them. This folder also contains any header files needed to compile.

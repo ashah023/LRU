@@ -1,0 +1,173 @@
+COP4610 – Principles of Operating Systems – Summer C 2014
+Prof. Jose F. Osorio
+Group: Apsalar
+Group Members: Maylem Gonzalez – 2134900
+               Renan Santana – 4031451
+File: Report.txt
+
+~Part 1 Observations~
+
+~Implementation of Part 1:
+
+In order to add a system call that collects the required memory management information, we used the macro foreach_zone to traverse all three zones and add the data from each zone to each of our counters from numbers 1 to 6. Numbers 1 and 2 just required us to access the zone struct's members nr_active and nr_inactive to obtain the necessary values. For numbers 3 and 4, we accessed the needed list (either the inactive or active list), and for each page in the list, if the page was referenced, we incremented a counter by 1.  
+
+
+For numbers 5 and 6, we modified mmzone.h by declaring the counters that would be necessary to track to the number of pages leaving the active list and the number of pages leaving the inactive list. We therefore added the members zone->nr_swt_inactive (counter for #5) and zone->nr_evicted (counter for #6) to the zone struct in this file. These counters were then initialized to zero in the function "free_area_init_core" in the file page_alloc.c, where the rest of the members of the zone struct are also initialized to zero. Finally, the counter for #5 (nr_swt_inactive) was incremented in the file vmscan.c under the function shrink_active list. Similarly, the counter for #6 (nr_evicted) was set to the number of pages in the shrink_inactive_list of this same file that were to either be freed or be promoted to the active list, minus those pages that were simply placed back into the inactive list after further inspection. 
+
+
+~Part 1 Test File Description:
+
+In our test file, we first run the system call and print out the memory statistics before making any memory allocations. We then run the system call again after allocating approximately 128,000 pages. Finally, we run the system call one final time after allocating the same amount of pages, but this time filling this block of memory with a numeric value. Our results are explained below.
+
+
+~Part 1 Test Result:
+
+[root@Apsalar Assignment4]# ./test_part_1
+
+(1) Memory statistics without allocations.
+
+----------------------------------------------
+MEMORY STATISTICS
+-----------------------------------------------
+Pages in the active list: 6871
+Pages in the inactive list: 5021
+Pages in the active list whose reference bit is set: 870
+Pages in the inactive list whose reference bit is set: 1078
+Pages moved from active to the inactive list: 21004998
+Pages evicted from the inactive list: 20384005
+
+(2) Memory statistics with allocations (not referenced)
+
+----------------------------------------------
+MEMORY STATISTICS
+-----------------------------------------------
+Pages in the active list: 6878
+Pages in the inactive list: 5028
+Pages in the active list whose reference bit is set: 871
+Pages in the inactive list whose reference bit is set: 1085
+Pages moved from active to the inactive list: 21004998
+Pages evicted from the inactive list: 20384005
+
+(3) Memory statistics with allocations (referenced).
+
+----------------------------------------------
+MEMORY STATISTICS
+-----------------------------------------------
+Pages in the active list: 43026
+Pages in the inactive list: 66638
+Pages in the active list whose reference bit is set: 27
+Pages in the inactive list whose reference bit is set: 38
+Pages moved from active to the inactive list: 21128546
+Pages evicted from the inactive list: 20446091
+
+(4) Freed all allocations.
+
+----------------------------------------------
+MEMORY STATISTICS
+-----------------------------------------------
+Pages in the active list: 6572
+Pages in the inactive list: 455
+Pages in the active list whose reference bit is set: 97
+Pages in the inactive list whose reference bit is set: 103
+Pages moved from active to the inactive list: 21128546
+Pages evicted from the inactive list: 20446091
+
+
+~Part 1 Test Observations:
+
+One of the first things we noticed when we ran our test file, after rebooting our system, was that the number of pages moved from the active list to the inactive list as well as the number of pages evicted from the inactive list were both zero in our initial system call (before allocating any memory). We believe that this is due to the fact that the functions shrink_inactive_list and shrink_active_list had yet to be called until further memory was allocated by the system (as in with our subsequent large number of page allocations). The sample output provided above was taken some time after the system had rebooted, so these values are no longer shown as zero.
+
+Since our first test, (1), is just running the system call without any memory allocations, we will first discuss part (2) of our test results, where 128,000 pages of memory were allocated. As can be seen, the number of pages in the active and inactive lists went up only slightly, as well as the number of pages in these lists with a set reference bit. The number of pages moved from the active list to the inactive list and the number of pages evicted from the inactive list remained exactly the same. Note that in this test, the memory that was allocated was not initialized. In other words, it was not referenced at a later time after the initial allocation. Because of this, it looks like the memory that we asked for was not immediately allocated until it was accessed later on (see discussion of test (3) below). We conclude then that the OS is using a form of lazy allocation to defer the memory allocation until the new memory is actually used.
+
+In our next test, test (3), we filled the memory block allocated in test (2) with ones. Since this means that we are now finally using the memory that we had previously allocated, we expected to see a big difference in our test results. Sure enough, the number of pages in the active list went up by 36,148 and the number of pages in the inactive list went up by 61,610. We were surprised to see a sharp decrease in the number of pages in the active list and inactive list whose reference bits are set (#3-4). We believe that this occurred because we were initializing and reference more memory than could be serviced without having to scan for pages to replace. In other words, the system had to constantly scan the pages with the Second Chance algorithm, changing the referenced bits of many of these pages to zero. Finally, we noticed that the number of pages moved from the active to the inactive list, and the number of pages moved from the inactive list, increased by 123,548 and 62,086, respectively. This further supports our conclusion for data values #3 and 4, since pages were constantly being referenced, with pages' reference bit being set or cleared. Since this change in the reference bit can cause a demotion from the active list to the inactive list, or a promotion from the inactive list to the active list (or can lead to the page being freed from the inactive list), it came as no surprise to see these numbers increase by so much. In face, the number of pages moved from the active to the inactive list increased by almost as much as the number of pages we originally allocated.
+
+Finally, in test (4), we freed the memory block that we had initialized in
+test (3). The biggest difference that we saw in our data was definitely the
+number of pages in both the active list and the inactive list. Freeing the
+memory decremented the number of pages in the active list by 36,464, and
+decremented the number of pages in the inactive list by 66,183. Data values #5
+and #6 remained exactly the same, and #3 and #4 still remained at relatively
+low numbers, although both increased.
+
+
+~Part 2 Observations~
+
+~Implementation of Part 2:
+
+To do part 2, we first had to add a frame reference counter in the page struct (found in file mm.h). 
+The main reason for using this reference counter is to only demote or free pages once their reference counter has dropped to zero. This algorithm still performs most of the functionality found in the second chance algorithm, and the majority of our modifications were restricted to shrink_active_list in vmscan.c. In order to test and clear the reference bit of a frame, we use a function called page_referenced in vmscan.c. Since this function returns the value of the reference bit before it was cleared, the return value was then added to our new reference counter. If the frame reference counter has reached zero, the page is evicted from the list. If the reference counter is not zero, the counter is decremented. We also took into account the fact that our reference counter could overflow, so we test for whether the reference counter + 1 is less than the counter. If this is the case, the counter must have overflowed and gone back to zero. Only if this is not true does the algorithm check the reference bit and add it to the counter.
+
+While implementing this section, we learned that the clock based or the second chance algorithms are only called when a shortage of memory takes place and the zones need to be shrunk. Because of this, we limited our changes to vmscan.c.
+
+
+~Part 2 Test File Description:
+
+The test file outputs four different types of tests, two for each of the page replacement algorithms tested. The first test uses the second chance algorithm and allocates approximately 315 MB of memory (but does not initialize this memory). The second test also uses the same second chance algorithm and allocates the same amount of memory, but it initializes the memory to 1 using the function memset. These same two tests are then repeated for our own clock based algorithm. This output provided by these tests allowed us to see a change in the memory of the system before and after the initialization of the allocated memory for each of the page replacement algorithms.
+
+
+~Part 2 Test Result:
+
+[root@Apsalar Assignment4]# ./test_part_2
+
+ (1) Second Chance Algorithm
+  Memory statistics with allocations (not referenced)
+
+---------------------------------------------
+MEMORY STATISTICS
+-----------------------------------------------
+Pages in the active list: 3143
+Pages in the inactive list: 9442
+Pages in the active list whose reference bit is set: 583
+Pages in the inactive list whose reference bit is set: 566
+Pages moved from active to the inactive list: 30827372
+Pages evicted from the inactive list: 26923978
+Time Elapsed 0.02000000
+
+ (2) Second Chance Algorithm
+  Memory statistics with allocations (referenced)
+
+---------------------------------------------
+MEMORY STATISTICS
+-----------------------------------------------
+Pages in the active list: 80254
+Pages in the inactive list: 9448
+Pages in the active list whose reference bit is set: 585
+Pages in the inactive list whose reference bit is set: 575
+Pages moved from active to the inactive list: 30827372
+Pages evicted from the inactive list: 26923978
+Time Elapsed 3.28000000
+
+ (3) Clock Based Algorithm
+  Memory statistics with allocations (not referenced)
+
+---------------------------------------------
+MEMORY STATISTICS
+-----------------------------------------------
+Pages in the active list: 80548
+Pages in the inactive list: 9456
+Pages in the active list whose reference bit is set: 585
+Pages in the inactive list whose reference bit is set: 583
+Pages moved from active to the inactive list: 30827372
+Pages evicted from the inactive list: 26923978
+Time Elapsed 0.05000000
+
+ (4) Clock Based Algorithm
+  Memory statistics with allocations (referenced)
+
+---------------------------------------------
+MEMORY STATISTICS
+-----------------------------------------------
+Pages in the active list: 58866
+Pages in the inactive list: 49158
+Pages in the active list whose reference bit is set: 20
+Pages in the inactive list whose reference bit is set: 14
+Pages moved from active to the inactive list: 30937663
+Pages evicted from the inactive list: 26994672
+Time Elapsed 4.69000000
+
+
+~Part 2 Test Observations:
+
+We ran our test program for part 2 5 times for each of several different memory allocation sizes (see folder "part 2 data" for our spreadsheet and our graph). As can be seen, our clock based algorithm performed better than the second chance algorithm in all cases. However, we feel that we did not do enough test cases to make a solid conclusion. For example, in the sample output that we provided above, our clock based algorithm actually did not perform as well as our second chance algorithm. In general, we noticed that for small memory allocations, the second chance algorithm appeared to do better. Since these small allocations are probably more common in the system than the larger ones where our clock based algorithm seemed to shine, we believe that the original second chance algorithm is actually more efficient for the system, despite what our graph may show. 
+
+We will now discuss our results for the sample output provided above. Our results for test (1) and test (2) were exactly what we expected, given our test results from part 1. Test (3) only showed a small increase in the number of pages in the active and inactive list, but we did not expect to see much of a change anyway since we were not initializing the memory. Test (4), however, really showed the difference in page replacement algorithms, since a great number of pages in the active list were demoted to the inactive list (probably those whose reference bits were zero in the active list, and were therefore evicted right away with our clock-based algorithm). This is also reflected in the large increase in the number of pages moved from the active list to the inactive list, as well as the number of pages moved from the inactive list. Finally, the number of pages in the two lists whose reference bit was set went down drastically. This can be explained by the part of our algorithm that clears the reference bit of a frame after its reference bit is added to the frame's reference counter.
